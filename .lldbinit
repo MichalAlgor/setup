@@ -1,0 +1,4 @@
+# ~/.lldbinit
+
+command regex ppjson 's/(.+)/po print(NSString(data: JSONSerialization.data(withJSONObject: %1, options: .prettyPrinted), encoding: String.Encoding.utf8.rawValue))/'
+command regex ppdata 's/(.+)/po print(String(data: JSONSerialization.data(withJSONObject: JSONSerialization.jsonObject(with: %1, options: []), options: .prettyPrinted), encoding: .utf8)!)/'

@@ -1,0 +1,7 @@
+*~
+.DS_Store
+Carthage/Checkouts
+fastlane/reports
+Gemfile.lock
+fastlane/screenshots
+com.crashlytics.missing-devices.txt

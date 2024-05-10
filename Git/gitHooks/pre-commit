@@ -1,0 +1,108 @@
+#! /usr/bin/env bash
+#/bin/sh
+
+word="!commit"
+matches=$(git diff --cached | grep -E "\+.*?$word")
+if [ "$matches" != "" ] 
+then
+    echo "'${word}' tag is detected."
+    echo "Please fix it before committing."
+    echo "  ${matches}"
+    exit 1
+fi
+
+#----------------------------------------------------------------
+# RUN SWIFTLINT  
+#----------------------------------------------------------------
+
+# Variables
+START_DATE=$(date +"%s")
+SWIFT_LINT=/opt/homebrew/bin/swiftlint
+hasErrors=0
+
+if [[ -e "${SWIFT_LINT}" ]]; then
+    # Export files in SCRIPT_INPUT_FILE_$count to lint against later
+    count=0
+    while IFS= read -r file_path; do
+        export SCRIPT_INPUT_FILE_$count="$file_path"
+        count=$((count + 1))
+# all diff & staged $ ls-files
+#    done < <((git diff --diff-filter=d --name-only & git diff --cached --diff-filter=d --name-only & git ls-files --others --exclude-standard;) | grep ".swift$")
+    done < <((git diff --cached --diff-filter=d --name-only & git ls-files --others --exclude-standard;) | grep ".swift$")
+    export SCRIPT_INPUT_FILE_COUNT=$count
+
+    if [ "$count" -eq 0 ]; then
+        echo "No files to lint!"
+        exit 0
+    fi
+
+    echo "Found $count lintable files! Linting now.."
+    config=$(find . -name '.swiftlint.yml' -maxdepth 2)
+    swiftlint --use-script-input-files --strict --config ${config}
+    RESULT=$? # swiftline exit value is number of errors
+
+    if [ $RESULT -eq 0 ]; then
+        echo "🎉  Well done. No violation."
+    else
+        echo "⛔️  SwiftLint violation!!"
+    fi
+    exit $RESULT
+else
+    echo "⚠️  WARNING: SwiftLint not found in swiftlint"
+    echo "⚠️  You might want to edit .git/hooks/pre-commit to locate your swiftlint"
+    exit 0
+fi
+
+
+# OLD 
+# Run SwiftLint for given filename
+run_swiftlint() {
+    local filename="${1}"
+    local config=$(find . -name '.swiftlint.yml' -maxdepth 2)
+    if [[ "${filename##*.}" == "swift" ]]; then
+        ${SWIFT_LINT} lint --strict --config ${config} "${filename}"
+        if [[ $? != 0 ]]; then
+            hasErrors=1
+        fi
+    fi
+}
+
+if [[ -e "${SWIFT_LINT}" ]]; then
+    echo "SwiftLint version: $(${SWIFT_LINT} version)"
+    # Run for staged files
+    # while IFS= read -r -d '' file; do
+    #     printf 'staged file = %q\n' "$file"
+    #     run_swiftlint "${file}";
+    # done < <(git diff --diff-filter=d --name-only -z)
+
+    # Run for unstaged files
+    # while IFS= read -r -d '' file; do
+    #     printf 'unstaged file = %q\n' "$file"
+    #     run_swiftlint "${file}";
+    # done < <(git diff --cached --diff-filter=d --name-only -z)
+    
+    # Run for added files
+    # while IFS= read -r -d '' file; do
+    #     printf 'new file = %q\n' "$file"
+    #     run_swiftlint "${file}";
+    # done < <(git ls-files --others --exclude-standard -z)
+
+    while IFS= read -r -d '' file; do
+        printf 'file = %q\n' "$file"
+        run_swiftlint "${file}";
+    done < <(git diff --diff-filter=d --name-only -z & git diff --cached --diff-filter=d --name-only -z & git ls-files --others --exclude-standard -z;)
+else
+    echo "⚠️ ${SWIFT_LINT} is not installed."
+    echo "⚠️  You might want to edit .git/hooks/pre-commit to locate your swiftlint"
+    exit 0
+fi
+
+END_DATE=$(date +"%s")
+DIFF=$(($END_DATE - $START_DATE))
+echo "SwiftLint took $(($DIFF / 60)) minutes and $(($DIFF % 60)) seconds to complete."
+if [ $hasErrors -eq 0 ]; then
+    echo "🎉  Well done. No violation."
+else
+    echo "⛔️  SwiftLint violation!!"
+fi
+exit $hasErrors
